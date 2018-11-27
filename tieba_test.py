@@ -62,11 +62,22 @@ def get_zhuti(soup):
     return zhuti, all_names, times
 
 
-def get_soup(url):
+from selenium import webdriver
+def get_soup(url, use_driver=False):
 
     try:
         html = urlopen(url).read().decode('UTF-8')
-        soup = BeautifulSoup(html, features='html.parser')
+        if use_driver:
+            driver = webdriver.Chrome()
+            driver.get(html)
+            source = driver.page_source
+            print('source: ', source)
+            driver.quit()
+            print('use driver')
+        else:
+            source = html
+        soup = BeautifulSoup(source, features='html.parser')
+        # driver.quit()
         return soup
     except:
         return None
@@ -165,19 +176,73 @@ def read_data(path, mask_path='./Hunan_Normal_University_logo1.jpg'):
     reader = csv.reader(csvFile)
     analyse = {}
     wordcount = {}
+    host_analyse = {}
+    multy = {}
     mask = np.array(Image.open(mask_path))
     j = 0
     sorted = []
-    KEY_WORD = r'物理'
+    KEY_WORD = r'工作'
     for line in reader:
         if line == []:
             continue
         name, zhuti, time = line
         # print(name, zhuti, time)
-        sorted = keyword_(KEY_WORD, name, zhuti, time, analyse)
+        sorted_1 = keyword_(KEY_WORD, name, zhuti, time, analyse)
         ret = hotword_(name, zhuti, time, wordcount, j, mask)
-    draw_image(sorted, keyword=KEY_WORD)
+        host_(KEY_WORD, name, zhuti, time, host_analyse)
+        multy_keywords_(['考研', '工作', '创业'], zhuti, multy)
+    show_multy(multy)
+    draw_image(sorted_1, keyword=KEY_WORD)
     show_cloud(wordcount)
+
+
+def show_multy(multy):
+    from matplotlib import pyplot as plt
+    plt.rcParams['font.sans-serif'] = ['SimHei']  # 解决中文乱码
+
+    plt.figure(figsize=(8, 8))  # 调节图形大小
+    labels = list(multy.keys())  # 定义标签
+    sizes = list(multy.values())  # 每块值
+    # colors = ['red', 'yellowgreen', 'lightskyblue', 'yellow']  # 每块颜色定义
+    # explode = (0, 0, 0)  # 将某一块分割出来，值越大分割出的间隙越大
+    patches, text1, text2 = plt.pie(sizes,
+                                    # explode=explode,
+                                    labels=labels,
+                                    # colors=colors,
+                                    autopct='%3.2f%%',  # 数值保留固定小数位
+                                    shadow=False,  # 无阴影设置
+                                    startangle=90,  # 逆时针起始角度设置
+                                    pctdistance=0.6)  # 数值距圆心半径倍数距离
+    # patches饼图的返回值，texts1饼图外label的文本，texts2饼图内部的文本
+    # x，y轴刻度设置一致，保证饼图为圆形
+    plt.axis('equal')
+    plt.show()
+
+
+
+
+def multy_keywords_(keywords, zhuti, multy_dict):
+    if len(keywords) == 0:
+        return None
+    for keyword in keywords:
+        if re.search(keyword, zhuti):
+            try:
+                multy_dict[keyword] += 1
+            except:
+                multy_dict[keyword] = 1
+
+
+def host_(KEY_WORD, name, zhuti, time, host_analyse):
+    present_time = [d.datetime.now().year, d.datetime.now().month, d.datetime.now().day]
+    if re.search(KEY_WORD, zhuti):
+        tieba_time = get_time_from_string(time)
+        if days_before(present_time, tieba_time, 365):
+            try:
+                host_analyse[name] += 1
+            except:
+                host_analyse[name] = 1
+            print(sorted_dict(host_analyse))
+            print('---------------')
 
 
 def keyword_(KEY_WORD, name, zhuti, time, analyse):
@@ -215,12 +280,22 @@ def hotword_(name, zhuti, time, wordcount, j, mask):
                 # print(word)
                 if len(word) < 2:
                     continue
+                if in_ban_words(word):
+                    continue
                 try:
                     wordcount[word] += 1
                 except:
                     wordcount[word] = 1
 
                 # print(sorted_dict(wordcount, 1)[:10])
+
+
+def in_ban_words(word):
+    ban = ['可以', '他的', '她的', '什么', '没有', '这个', '楼主', '一个', '联系', '方式']
+    for b in ban:
+        if b == word:
+            return True
+    return False
 
 
 def show_cloud(wordcount):
@@ -273,6 +348,10 @@ if __name__ == '__main__':
     # writer = csv.writer(csvfile)
     read_data('./dataset/tieba_data.csv')
     info = []
+    mm = {'a':10, 'b':20, 'c':30}
+    print(list(mm.keys()), mm.values())
+    # show_multy(multy=mm)
+
     while(False):
         # 开启一个死循环爬去网页，当收到403 bad gate 即停止
         try:
@@ -304,7 +383,7 @@ if __name__ == '__main__':
                     for i in range(len(zhuti)):
                         # 打印输出内容：作者、内容、时间(格式没优化)
                         # info.append([name[i], zhuti[i], times[i]])
-                        # print('writen:', [name[i], zhuti[i], times[i]])
+                        print('writen:', [name[i], zhuti[i], times[i]])
                         try:
                             print('write')
                             # writer.writerow([name[i], zhuti[i], times[i]])
