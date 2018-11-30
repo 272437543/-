@@ -1,6 +1,7 @@
 from bs4 import BeautifulSoup
 from urllib.request import urlopen
 import re
+from matplotlib import pyplot as plt
 
 
 def get_titles_urls(soup):
@@ -63,8 +64,9 @@ def get_zhuti(soup):
 
 
 from selenium import webdriver
-def get_soup(url, use_driver=False):
 
+
+def get_soup(url, use_driver=False):
     try:
         html = urlopen(url).read().decode('UTF-8')
         if use_driver:
@@ -84,7 +86,8 @@ def get_soup(url, use_driver=False):
 
 
 def get_page(page=0):
-    return 'http://tieba.baidu.com/f?kw=%E6%B9%96%E5%8D%97%E5%B8%88%E8%8C%83%E5%A4%A7%E5%AD%A6&ie=utf-8&pn=' + str(50 * page)
+    return 'http://tieba.baidu.com/f?kw=%E6%B9%96%E5%8D%97%E5%B8%88%E8%8C%83%E5%A4%A7%E5%AD%A6&ie=utf-8&pn=' + str(
+        50 * page)
 
 
 def get_zhuti_page(url, page=0):
@@ -112,7 +115,7 @@ def test():
             if ['d_name'] == li['class']:
                 all_names.append(li.get_text())
         except:
-            todo=0
+            todo = 0
 
     index = 0
     zhuti = []
@@ -147,7 +150,7 @@ def sorted_dict(analyse, axe=0):
     return sorted(analyse.items(), key=lambda item: item[axe], reverse=True)
 
 
-def draw_image(sorted, path='./dataset/keyword.html', keyword='', mode='lines'):
+def draw_image(sorted, path='./dataset/time_keyword', keyword='', mode='lines'):
     import plotly.graph_objs as go
     import plotly.plotly as py
     import plotly
@@ -172,35 +175,45 @@ def draw_image(sorted, path='./dataset/keyword.html', keyword='', mode='lines'):
 
 
 def read_data(path, mask_path='./Hunan_Normal_University_logo1.jpg'):
+    # 统计发帖数的饼图
+    # 热点词情感分数统计
+    # 关系图的优化
     csvFile = open(path, "r")
     reader = csv.reader(csvFile)
+    feelings = {}
     analyse = {}
     wordcount = {}
     host_analyse = {}
     multy = {}
     mask = np.array(Image.open(mask_path))
     j = 0
-    sorted = []
     KEY_WORD = r'工作'
+    multy_words = ['考研', '工作', '创业']
     for line in reader:
         if line == []:
             continue
         name, zhuti, time = line
         # print(name, zhuti, time)
-        sorted_1 = keyword_(KEY_WORD, name, zhuti, time, analyse)
-        ret = hotword_(name, zhuti, time, wordcount, j, mask)
+        keyword_(KEY_WORD, name, zhuti, time, analyse, feelings)
+        hotword_(name, zhuti, time, wordcount, j, mask)
         host_(KEY_WORD, name, zhuti, time, host_analyse)
-        multy_keywords_(['考研', '工作', '创业'], zhuti, multy)
-    show_multy(multy)
-    draw_image(sorted_1, keyword=KEY_WORD)
+        multy_keywords_(multy_words, zhuti, multy)
+
+    show_multy(feelings, str(KEY_WORD + "的情绪分布"))
+    show_multy(dict(sorted_dict(host_analyse, 1)[0:10]),
+               str("对于关键字：" + KEY_WORD + "网友的频率"))
+    show_multy(multy, "多关键字")
+    draw_image(sorted_dict(analyse), keyword=KEY_WORD)
     show_cloud(wordcount)
+    plt.show()
 
 
-def show_multy(multy):
-    from matplotlib import pyplot as plt
+def show_multy(multy, title=""):
+    # from matplotlib import pyplot as plt
     plt.rcParams['font.sans-serif'] = ['SimHei']  # 解决中文乱码
 
     plt.figure(figsize=(8, 8))  # 调节图形大小
+    plt.title(title)
     labels = list(multy.keys())  # 定义标签
     sizes = list(multy.values())  # 每块值
     # colors = ['red', 'yellowgreen', 'lightskyblue', 'yellow']  # 每块颜色定义
@@ -216,9 +229,7 @@ def show_multy(multy):
     # patches饼图的返回值，texts1饼图外label的文本，texts2饼图内部的文本
     # x，y轴刻度设置一致，保证饼图为圆形
     plt.axis('equal')
-    plt.show()
-
-
+    # plt.show()
 
 
 def multy_keywords_(keywords, zhuti, multy_dict):
@@ -241,11 +252,11 @@ def host_(KEY_WORD, name, zhuti, time, host_analyse):
                 host_analyse[name] += 1
             except:
                 host_analyse[name] = 1
-            print(sorted_dict(host_analyse))
-            print('---------------')
+            # print(sorted_dict(host_analyse, 1)[0:10])
+            # print('---------------')
 
 
-def keyword_(KEY_WORD, name, zhuti, time, analyse):
+def keyword_(KEY_WORD, name, zhuti, time, analyse, feelings):
     # print(name, zhuti, time)
     from snownlp import SnowNLP
 
@@ -258,10 +269,14 @@ def keyword_(KEY_WORD, name, zhuti, time, analyse):
             except:
                 analyse[time] = 1
             s = SnowNLP(zhuti)
-            print(name, ":", zhuti.strip(), '\n情绪分数:', s.sentiments)
+            import math
+            try:
+                feelings[round(s.sentiments * 10.0)] += 1
+            except:
+                feelings[round(s.sentiments * 10.0)] = 1
+            # print(name, ":", zhuti.strip(), '\n情绪分数:', s.sentiments * 10.0, round(s.sentiments * 10.0), math.floor(s.sentiments * 10.0), math.ceil(s.sentiments * 10.0))
             # print(sorted_dict(analyse))
-            print('---------------')
-    return sorted_dict(analyse)
+            # print('---------------')
 
 
 def hotword_(name, zhuti, time, wordcount, j, mask):
@@ -301,16 +316,16 @@ def in_ban_words(word):
 def show_cloud(wordcount):
     from wordcloud import WordCloud
     wc = WordCloud(font_path="simfang.ttf",
-                          background_color="white",
-                          width=1500, height=950,
-                          max_words=500,
-                          mask=mask,
-                          margin=2).generate_from_frequencies(wordcount)
-    import matplotlib.pyplot as plt
+                   background_color="white",
+                   width=1500, height=950,
+                   max_words=500,
+                   mask=mask,
+                   margin=2).generate_from_frequencies(wordcount)
+    # import matplotlib.pyplot as plt
     plt.figure(figsize=(15, 15))
     plt.imshow(wc, interpolation='bilinear')
     plt.axis("off")
-    plt.show()
+    # plt.show()
 
 
 def remove_punctuation(line):
@@ -340,19 +355,18 @@ if __name__ == '__main__':
     j = 0
     import numpy as np
     from PIL import Image
+
     path = './Hunan_Normal_University_logo1.jpg'
     mask = np.array(Image.open(path))
     present_time = [d.datetime.now().year, d.datetime.now().month, d.datetime.now().day]
     import csv
-    # csvfile = open('./dataset/tieba_data.csv', 'w')
-    # writer = csv.writer(csvfile)
-    read_data('./dataset/tieba_data.csv')
-    info = []
-    mm = {'a':10, 'b':20, 'c':30}
-    print(list(mm.keys()), mm.values())
-    # show_multy(multy=mm)
 
-    while(False):
+    # csvfile = open('./dataset/chat_data.csv', 'w')
+    # writer = csv.writer(csvfile)
+    # read_data('./dataset/tieba_data.csv')
+    info = []
+
+    while (True):
         # 开启一个死循环爬去网页，当收到403 bad gate 即停止
         try:
             tieba_url = get_page(page)  # 得到网页的页码
@@ -380,17 +394,25 @@ if __name__ == '__main__':
                     else:
                         zhuti_page += 1
                         before = zhuti[0]
+                    master = name[0][1:len(name[0]) - 1]
+                    print('master', master)
                     for i in range(len(zhuti)):
                         # 打印输出内容：作者、内容、时间(格式没优化)
                         # info.append([name[i], zhuti[i], times[i]])
-                        print('writen:', [name[i], zhuti[i], times[i]])
+                        # print('contain: ', [name[i], zhuti[i], times[i]])
+                        guest = name[i][1:len(name[i]) - 1]
+                        if master != guest:
+
+                            # print([master, guest])
+                            print(str(titles[index] + ":" + max(master, guest) + ":" + min(master, guest) + ":" + zhuti[i].strip()))
                         try:
-                            print('write')
+                            todo=0
+                            # print('write')
                             # writer.writerow([name[i], zhuti[i], times[i]])
                         except:
                             print('!!!!!!!!! io error !!!!!!!!!!!!!')
                         """
-                        
+
                         if re.search(r'http://pan.baidu.com/', zhuti[i]):
                             continue
                         sentences = re.split(r"([.。!！?？；;，,“”\s+])", zhuti[i].strip())
@@ -418,7 +440,7 @@ if __name__ == '__main__':
                                                                    max_words=100,
                                                                    mask=mask,
                                                                    margin=2).generate_from_frequencies(wordcount)
-                                        import matplotlib.pyplot as plt
+                                        # import matplotlib.pyplot as plt
 
                                         plt.imshow(wordcloud, interpolation='bilinear')
                                         plt.axis("off")
@@ -428,7 +450,7 @@ if __name__ == '__main__':
                                     # print(sorted_dict(wordcount, 1)[:10])
 
                         # print('\t回复：', '作者', name[i], '内容', zhuti[i], '时间', times[i])
-                        
+
                         if re.search(KEY_WORD, zhuti[i]):
                             tieba_time = get_time_from_string(times[i])
                             if days_before(present_time, tieba_time, 365):
@@ -446,5 +468,4 @@ if __name__ == '__main__':
         except:
             print('HTTP done')
             break
-
 
